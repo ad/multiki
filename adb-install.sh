@@ -72,7 +72,7 @@ echo "📦 Файл: $ZIP_FILE"
 
 # Установка
 echo "📂 Установка плагина..."
-TEMP_PATH="/sdcard/Download"
+TEMP_PATH="/storage/emulated/0/Download"
 
 # Копировать ZIP
 adb push "$ZIP_FILE" "$TEMP_PATH/"
@@ -88,8 +88,7 @@ if adb shell "[ -f '$KODI_PATH/$PLUGIN_NAME/addon.xml' ]"; then
     VERSION=$(adb shell "grep 'version=' '$KODI_PATH/$PLUGIN_NAME/addon.xml'" | sed 's/.*version="\([^"]*\)".*/\1/')
     echo "✅ Плагин установлен! Версия: $VERSION"
     
-    # Очистить
-    adb shell "rm '$TEMP_PATH/$(basename "$ZIP_FILE")'"
+    # ZIP файл оставляем в Download для удобства
     
     echo ""
     echo "🎉 Готово!"
