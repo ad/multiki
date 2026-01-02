@@ -22,7 +22,7 @@ fi
 
 # Запустить тесты
 echo "🧪 Запуск тестов..."
-python -m pytest tests/ -v --tb=short
+python3 -m pytest tests/ -v --tb=short
 
 # Проверить структуру плагина
 echo "📁 Проверка структуры плагина..."
@@ -35,7 +35,7 @@ test -f resources/lib/cache.py || { echo "❌ Отсутствует resources/l
 
 # Проверить addon.xml
 echo "📋 Проверка addon.xml..."
-python -c "
+python3 -c "
 import xml.etree.ElementTree as ET
 tree = ET.parse('addon.xml')
 root = tree.getroot()
@@ -48,7 +48,7 @@ print(f'✅ Version: {root.get(\"version\")}')
 # Проверить импорты
 echo "📦 Проверка импортов..."
 cd resources/lib
-python -c "
+python3 -c "
 import sys
 sys.path.insert(0, '.')
 import parser
