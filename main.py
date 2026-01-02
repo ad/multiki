@@ -12,47 +12,33 @@ import xbmcaddon
 
 
 def router(paramstring):
-    """
-    Роутер для обработки URL параметров от Kodi.
-    
-    Args:
-        paramstring: URL query string с параметрами действия
-    
-    Actions:
-        - "" (empty): показать главное меню
-        - "listing": показать список мультфильмов
-        - "play": воспроизвести видео
-        - "refresh": принудительно обновить кэш
-    """
+    """Роутер для обработки URL параметров от Kodi."""
     try:
         params = dict(parse_qsl(paramstring))
         
         if params:
-            if params['action'] == 'listing':
+            action = params.get('action', '')
+            
+            if action == 'listing':
                 list_videos()
-            elif params['action'] == 'play':
-                play_video(params['path'])
-            elif params['action'] == 'refresh':
+            elif action == 'search':
+                search_videos()
+            elif action == 'play':
+                play_video(params.get('path', ''))
+            elif action == 'refresh':
                 refresh_cache()
             else:
-                raise ValueError(f'Invalid paramstring: {paramstring}')
+                raise ValueError(f'Invalid action: {action}')
         else:
             list_categories()
             
     except Exception as e:
-        # Общая обработка ошибок роутера
         xbmcgui.Dialog().notification(
             'ArjLover Plugin', 
-            'Ошибка плагина',
+            f'Ошибка: {str(e)[:50]}',
             xbmcgui.NOTIFICATION_ERROR,
             5000
         )
-        # Логировать ошибку для отладки
-        try:
-            import xbmc
-            xbmc.log(f"ArjLover Plugin Error: {str(e)}", xbmc.LOGERROR)
-        except ImportError:
-            pass
 
 
 def list_categories():
@@ -65,6 +51,12 @@ def list_categories():
     url = f'{addon_url}?action=listing'
     li = xbmcgui.ListItem('Все мультфильмы')
     li.setInfo('video', {'title': 'Все мультфильмы', 'genre': 'Мультфильмы'})
+    xbmcplugin.addDirectoryItem(handle=addon_handle, url=url, listitem=li, isFolder=True)
+    
+    # Пункт "Поиск"
+    url = f'{addon_url}?action=search'
+    li = xbmcgui.ListItem('Поиск')
+    li.setInfo('video', {'title': 'Поиск', 'plot': 'Поиск мультфильмов по названию'})
     xbmcplugin.addDirectoryItem(handle=addon_handle, url=url, listitem=li, isFolder=True)
     
     # Пункт "Обновить каталог"
@@ -117,18 +109,21 @@ def list_videos():
             url = f'{addon_url}?action=play&path={urllib.parse.quote(cartoon.url)}'
             li = xbmcgui.ListItem(cartoon.title)
             
-            # Установить информацию о видео
             li.setInfo('video', {
                 'title': cartoon.title,
                 'genre': 'Мультфильмы',
-                'mediatype': 'movie'
+                'mediatype': 'movie',
+                'plot': cartoon.plot,
+                'duration': cartoon.duration
             })
             
-            # Установить thumbnail если доступен
             if cartoon.thumbnail:
-                li.setArt({'thumb': cartoon.thumbnail})
+                li.setArt({
+                    'thumb': cartoon.thumbnail,
+                    'poster': cartoon.thumbnail,
+                    'fanart': cartoon.thumbnail
+                })
             
-            # Указать что это воспроизводимый элемент
             li.setProperty('IsPlayable', 'true')
             
             xbmcplugin.addDirectoryItem(
@@ -137,6 +132,11 @@ def list_videos():
                 listitem=li, 
                 isFolder=False
             )
+        
+        # Установить тип контента и вид отображения
+        xbmcplugin.setContent(addon_handle, 'movies')
+        xbmcplugin.addSortMethod(addon_handle, xbmcplugin.SORT_METHOD_TITLE)
+        xbmcplugin.addSortMethod(addon_handle, xbmcplugin.SORT_METHOD_UNSORTED)
         
         xbmcplugin.endOfDirectory(addon_handle)
         
@@ -152,24 +152,13 @@ def list_videos():
 
 
 def play_video(path):
-    """
-    Начать воспроизведение видео.
-    
-    Args:
-        path: URL видеофайла
-    """
+    """Начать воспроизведение видео."""
     try:
-        # Декодировать URL если он был закодирован
         video_url = urllib.parse.unquote(path)
-        
-        # Создать ListItem для воспроизведения
         li = xbmcgui.ListItem(path=video_url)
-        
-        # Передать URL в Kodi player
         xbmcplugin.setResolvedUrl(int(sys.argv[1]), True, li)
         
     except Exception as e:
-        # Обработка ошибок воспроизведения
         xbmcgui.Dialog().notification(
             'ArjLover Plugin', 
             'Видео недоступно',
@@ -179,46 +168,138 @@ def play_video(path):
         xbmcplugin.setResolvedUrl(int(sys.argv[1]), False, xbmcgui.ListItem())
 
 
+def search_videos():
+    """Поиск мультфильмов по названию."""
+    addon_url = sys.argv[0]
+    addon_handle = int(sys.argv[1])
+    
+    # Показать диалог ввода
+    keyboard = xbmcgui.Dialog()
+    query = keyboard.input('Поиск мультфильмов', type=xbmcgui.INPUT_ALPHANUM)
+    
+    if not query:
+        xbmcplugin.endOfDirectory(addon_handle, succeeded=False)
+        return
+    
+    query_lower = query.lower()
+    
+    try:
+        sys.path.append(os.path.join(os.path.dirname(__file__), 'resources', 'lib'))
+        from cache import load_cache, save_cache
+        from parser import fetch_catalog, parse_catalog
+        
+        cartoons = load_cache()
+        
+        if cartoons is None:
+            try:
+                base_url = 'https://multiki.arjlover.net/multiki/'
+                html = fetch_catalog(base_url)
+                cartoons = parse_catalog(html, base_url)
+                save_cache(cartoons)
+            except ConnectionError:
+                xbmcgui.Dialog().notification(
+                    'ArjLover Plugin', 
+                    'Сайт недоступен',
+                    xbmcgui.NOTIFICATION_ERROR,
+                    5000
+                )
+                xbmcplugin.endOfDirectory(addon_handle, succeeded=False)
+                return
+        
+        # Фильтруем по запросу
+        results = [c for c in cartoons if query_lower in c.title.lower()]
+        
+        if not results:
+            xbmcgui.Dialog().notification(
+                'ArjLover Plugin', 
+                f'Ничего не найдено: {query}',
+                xbmcgui.NOTIFICATION_INFO,
+                3000
+            )
+            xbmcplugin.endOfDirectory(addon_handle, succeeded=False)
+            return
+        
+        # Показать результаты
+        for cartoon in results:
+            url = f'{addon_url}?action=play&path={urllib.parse.quote(cartoon.url)}'
+            li = xbmcgui.ListItem(cartoon.title)
+            
+            li.setInfo('video', {
+                'title': cartoon.title,
+                'genre': 'Мультфильмы',
+                'mediatype': 'movie',
+                'plot': cartoon.plot,
+                'duration': cartoon.duration
+            })
+            
+            if cartoon.thumbnail:
+                li.setArt({
+                    'thumb': cartoon.thumbnail,
+                    'poster': cartoon.thumbnail,
+                    'fanart': cartoon.thumbnail
+                })
+            
+            li.setProperty('IsPlayable', 'true')
+            
+            xbmcplugin.addDirectoryItem(
+                handle=addon_handle, 
+                url=url, 
+                listitem=li, 
+                isFolder=False
+            )
+        
+        xbmcplugin.setContent(addon_handle, 'movies')
+        xbmcplugin.endOfDirectory(addon_handle)
+        
+        xbmcgui.Dialog().notification(
+            'ArjLover Plugin', 
+            f'Найдено: {len(results)}',
+            xbmcgui.NOTIFICATION_INFO,
+            2000
+        )
+        
+    except Exception as e:
+        xbmcgui.Dialog().notification(
+            'ArjLover Plugin', 
+            'Ошибка поиска',
+            xbmcgui.NOTIFICATION_ERROR,
+            5000
+        )
+        xbmcplugin.endOfDirectory(addon_handle, succeeded=False)
+
+
 def refresh_cache():
     """Принудительно обновить кэш каталога."""
     try:
-        # Импорт модулей из resources/lib
         sys.path.append(os.path.join(os.path.dirname(__file__), 'resources', 'lib'))
         from cache import clear_cache, save_cache
         from parser import fetch_catalog, parse_catalog
         
-        # Очистить существующий кэш
         clear_cache()
         
-        # Загрузить свежие данные с сайта
         base_url = 'https://multiki.arjlover.net/multiki/'
         html = fetch_catalog(base_url)
         cartoons = parse_catalog(html, base_url)
-        
-        # Сохранить в кэш
         save_cache(cartoons)
         
-        # Показать уведомление об успехе
         xbmcgui.Dialog().notification(
             'ArjLover Plugin', 
-            'Каталог успешно обновлен',
+            f'Каталог обновлен: {len(cartoons)} мультфильмов',
             xbmcgui.NOTIFICATION_INFO,
             3000
         )
         
-    except ConnectionError as e:
-        # Ошибка сети
+    except ConnectionError:
         xbmcgui.Dialog().notification(
             'ArjLover Plugin', 
-            'Сайт недоступен. Проверьте подключение к интернету.',
+            'Сайт недоступен',
             xbmcgui.NOTIFICATION_ERROR,
             5000
         )
-    except Exception as e:
-        # Общая ошибка
+    except Exception:
         xbmcgui.Dialog().notification(
             'ArjLover Plugin', 
-            'Ошибка обновления каталога',
+            'Ошибка обновления',
             xbmcgui.NOTIFICATION_ERROR,
             5000
         )
