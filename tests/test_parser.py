@@ -7,13 +7,9 @@ import sys
 # Add resources/lib to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'resources', 'lib'))
 
-from parser import Cartoon
-
-
-class TestParser(unittest.TestCase):
-
 from parser import Cartoon, parse_catalog
 from cache import save_cache, load_cache, clear_cache
+
 
 class TestParseCatalog(unittest.TestCase):
     
@@ -145,3 +141,7 @@ class TestCache(unittest.TestCase):
             self.assertEqual(original.url, loaded.url)
             self.assertEqual(original.extension, loaded.extension)
             self.assertEqual(original.thumbnail, loaded.thumbnail)
+
+
+if __name__ == '__main__':
+    unittest.main()
