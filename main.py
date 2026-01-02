@@ -21,6 +21,10 @@ def router(paramstring):
             
             if action == 'listing':
                 list_videos()
+            elif action == 'alphabet':
+                show_alphabet()
+            elif action == 'byletter':
+                list_by_letter(params.get('letter', ''))
             elif action == 'search':
                 search_videos()
             elif action == 'play':
@@ -47,19 +51,25 @@ def list_categories():
     addon_url = sys.argv[0]
     addon_handle = int(sys.argv[1])
     
-    # Пункт "Все мультфильмы"
+    # Все мультфильмы
     url = f'{addon_url}?action=listing'
     li = xbmcgui.ListItem('Все мультфильмы')
     li.setInfo('video', {'title': 'Все мультфильмы', 'genre': 'Мультфильмы'})
     xbmcplugin.addDirectoryItem(handle=addon_handle, url=url, listitem=li, isFolder=True)
     
-    # Пункт "Поиск"
+    # По алфавиту
+    url = f'{addon_url}?action=alphabet'
+    li = xbmcgui.ListItem('По алфавиту')
+    li.setInfo('video', {'title': 'По алфавиту', 'plot': 'Выбрать букву для фильтрации'})
+    xbmcplugin.addDirectoryItem(handle=addon_handle, url=url, listitem=li, isFolder=True)
+    
+    # Поиск
     url = f'{addon_url}?action=search'
     li = xbmcgui.ListItem('Поиск')
     li.setInfo('video', {'title': 'Поиск', 'plot': 'Поиск мультфильмов по названию'})
     xbmcplugin.addDirectoryItem(handle=addon_handle, url=url, listitem=li, isFolder=True)
     
-    # Пункт "Обновить каталог"
+    # Обновить каталог
     url = f'{addon_url}?action=refresh'
     li = xbmcgui.ListItem('Обновить каталог')
     li.setInfo('video', {'title': 'Обновить каталог', 'plot': 'Принудительно обновить список мультфильмов'})
@@ -166,6 +176,84 @@ def play_video(path):
             5000
         )
         xbmcplugin.setResolvedUrl(int(sys.argv[1]), False, xbmcgui.ListItem())
+
+
+def show_alphabet():
+    """Показать алфавитный указатель."""
+    addon_url = sys.argv[0]
+    addon_handle = int(sys.argv[1])
+    
+    # Русский алфавит + цифры
+    letters = ['0-9'] + list('АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ')
+    
+    for letter in letters:
+        url = f'{addon_url}?action=byletter&letter={urllib.parse.quote(letter)}'
+        li = xbmcgui.ListItem(letter)
+        li.setInfo('video', {'title': letter})
+        xbmcplugin.addDirectoryItem(handle=addon_handle, url=url, listitem=li, isFolder=True)
+    
+    xbmcplugin.endOfDirectory(addon_handle)
+
+
+def list_by_letter(letter):
+    """Показать мультфильмы на выбранную букву."""
+    addon_url = sys.argv[0]
+    addon_handle = int(sys.argv[1])
+    
+    letter = urllib.parse.unquote(letter)
+    
+    try:
+        sys.path.append(os.path.join(os.path.dirname(__file__), 'resources', 'lib'))
+        from cache import load_cache, save_cache
+        from parser import fetch_catalog, parse_catalog
+        
+        cartoons = load_cache()
+        
+        if cartoons is None:
+            try:
+                base_url = 'https://multiki.arjlover.net/multiki/'
+                html = fetch_catalog(base_url)
+                cartoons = parse_catalog(html, base_url)
+                save_cache(cartoons)
+            except ConnectionError:
+                xbmcgui.Dialog().notification('ArjLover Plugin', 'Сайт недоступен', xbmcgui.NOTIFICATION_ERROR, 5000)
+                xbmcplugin.endOfDirectory(addon_handle, succeeded=False)
+                return
+        
+        # Фильтруем по букве
+        if letter == '0-9':
+            results = [c for c in cartoons if c.title and c.title[0].isdigit()]
+        else:
+            results = [c for c in cartoons if c.title and c.title[0].upper() == letter]
+        
+        for cartoon in results:
+            url = f'{addon_url}?action=play&path={urllib.parse.quote(cartoon.url)}'
+            li = xbmcgui.ListItem(cartoon.title)
+            
+            li.setInfo('video', {
+                'title': cartoon.title,
+                'genre': 'Мультфильмы',
+                'mediatype': 'movie',
+                'plot': cartoon.plot,
+                'duration': cartoon.duration
+            })
+            
+            if cartoon.thumbnail:
+                li.setArt({
+                    'thumb': cartoon.thumbnail,
+                    'poster': cartoon.thumbnail,
+                    'fanart': cartoon.thumbnail
+                })
+            
+            li.setProperty('IsPlayable', 'true')
+            xbmcplugin.addDirectoryItem(handle=addon_handle, url=url, listitem=li, isFolder=False)
+        
+        xbmcplugin.setContent(addon_handle, 'movies')
+        xbmcplugin.endOfDirectory(addon_handle)
+        
+    except Exception as e:
+        xbmcgui.Dialog().notification('ArjLover Plugin', 'Ошибка', xbmcgui.NOTIFICATION_ERROR, 5000)
+        xbmcplugin.endOfDirectory(addon_handle, succeeded=False)
 
 
 def search_videos():
