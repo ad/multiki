@@ -37,8 +37,8 @@ def parse_catalog(html: str, base_url: str) -> List[Cartoon]:
     title_matches = re.findall(title_pattern, html, re.IGNORECASE)
     
     # Найти все ссылки на видеофайлы для скачивания
-    # Паттерн для поиска прямых ссылок на видео: href="http://multiki.arjlover.net/multiki/filename.ext"
-    video_pattern = r'href="(http://multiki\.arjlover\.net/multiki/[^"]+\.(?:avi|mp4|mkv|flv))"'
+    # Паттерн для поиска прямых ссылок на видео: href="http://domain.com/multiki/filename.ext"
+    video_pattern = r'href="(https?://[^/]+/multiki/[^"]+\.(?:avi|mp4|mkv|flv))"'
     video_matches = re.findall(video_pattern, html, re.IGNORECASE)
     
     # Найти строки таблицы целиком для сопоставления названий и ссылок
@@ -55,7 +55,7 @@ def parse_catalog(html: str, base_url: str) -> List[Cartoon]:
         title = title_match.group(1).strip()
         
         # Извлечь ссылку на видеофайл из той же строки
-        video_match = re.search(r'href="(http://multiki\.arjlover\.net/multiki/[^"]+\.(?:avi|mp4|mkv|flv))"', row, re.IGNORECASE)
+        video_match = re.search(r'href="(https?://[^/]+/multiki/[^"]+\.(?:avi|mp4|mkv|flv))"', row, re.IGNORECASE)
         if not video_match:
             continue
             
