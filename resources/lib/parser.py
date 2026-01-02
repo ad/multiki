@@ -15,27 +15,6 @@ class Cartoon:
     thumbnail: str  # URL изображения-превью (если доступно)
 
 
-def decode_filename(encoded: str) -> str:
-    """
-    Декодировать URL-encoded имя файла в читаемое название.
-    
-    Args:
-        encoded: URL-encoded строка (например, "%D0%9C%D0%B0%D1%88%D0%B0")
-    
-    Returns:
-        Декодированная строка на русском языке
-    """
-    # URL-decode с UTF-8
-    decoded = urllib.parse.unquote(encoded, encoding='utf-8')
-    
-    # Удаление расширения файла из названия только если есть расширение
-    name, ext = os.path.splitext(decoded)
-    if ext:
-        return name
-    else:
-        return decoded
-
-
 def parse_catalog(html: str, base_url: str) -> List[Cartoon]:
     """
     Распарсить HTML и извлечь список мультфильмов.
@@ -52,48 +31,49 @@ def parse_catalog(html: str, base_url: str) -> List[Cartoon]:
     # Поддерживаемые видео расширения
     video_extensions = {'.avi', '.mp4', '.mkv', '.flv'}
     
-    # Поддерживаемые расширения изображений для thumbnail
-    image_extensions = {'.jpg', '.png'}
+    # Найти все строки таблицы с названиями мультфильмов
+    # Паттерн для поиска строк с названиями: <td class="l"><a href="...">Название</a></td>
+    title_pattern = r'<td class="l"><a href="[^"]*">([^<]+)</a></td>'
+    title_matches = re.findall(title_pattern, html, re.IGNORECASE)
     
-    # Найти все ссылки на файлы
-    # Ищем href="filename.ext" в HTML
-    link_pattern = r'href="([^"]+\.(?:avi|mp4|mkv|flv))"'
-    video_matches = re.findall(link_pattern, html, re.IGNORECASE)
+    # Найти все ссылки на видеофайлы для скачивания
+    # Паттерн для поиска прямых ссылок на видео: href="http://multiki.arjlover.net/multiki/filename.ext"
+    video_pattern = r'href="(http://multiki\.arjlover\.net/multiki/[^"]+\.(?:avi|mp4|mkv|flv))"'
+    video_matches = re.findall(video_pattern, html, re.IGNORECASE)
     
-    # Также найти все изображения для быстрого поиска thumbnail
-    img_pattern = r'href="([^"]+\.(?:jpg|png))"'
-    image_matches = set(re.findall(img_pattern, html, re.IGNORECASE))
+    # Найти строки таблицы целиком для сопоставления названий и ссылок
+    # Паттерн для поиска полных строк таблицы
+    row_pattern = r'<tr class="[oe]">(.*?)</tr>'
+    rows = re.findall(row_pattern, html, re.DOTALL | re.IGNORECASE)
     
-    for video_file in video_matches:
-        # Получить расширение файла
-        _, extension = os.path.splitext(video_file)
+    for row in rows:
+        # Извлечь название из строки
+        title_match = re.search(r'<td class="l"><a href="[^"]*">([^<]+)</a></td>', row, re.IGNORECASE)
+        if not title_match:
+            continue
+            
+        title = title_match.group(1).strip()
         
-        # Проверить, что это видео файл
-        if extension.lower() in video_extensions:
-            # Построить полный URL
-            full_url = urllib.parse.urljoin(base_url, video_file)
+        # Извлечь ссылку на видеофайл из той же строки
+        video_match = re.search(r'href="(http://multiki\.arjlover\.net/multiki/[^"]+\.(?:avi|mp4|mkv|flv))"', row, re.IGNORECASE)
+        if not video_match:
+            continue
             
-            # Декодировать название из имени файла
-            title = decode_filename(video_file)
-            
-            # Поиск соответствующего thumbnail
-            thumbnail_url = ""
-            base_name = os.path.splitext(video_file)[0]
-            
-            # Проверить наличие изображений с тем же базовым именем
-            for img_ext in image_extensions:
-                img_filename = base_name + img_ext
-                if img_filename in image_matches:
-                    thumbnail_url = urllib.parse.urljoin(base_url, img_filename)
-                    break
-            
-            cartoon = Cartoon(
-                title=title,
-                url=full_url,
-                extension=extension,
-                thumbnail=thumbnail_url
-            )
-            cartoons.append(cartoon)
+        video_url = video_match.group(1)
+        
+        # Получить расширение файла
+        _, extension = os.path.splitext(video_url)
+        
+        # Поиск thumbnail (пока оставим пустым, так как в данной структуре их нет)
+        thumbnail_url = ""
+        
+        cartoon = Cartoon(
+            title=title,
+            url=video_url,
+            extension=extension,
+            thumbnail=thumbnail_url
+        )
+        cartoons.append(cartoon)
     
     return cartoons
 

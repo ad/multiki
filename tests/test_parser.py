@@ -7,50 +7,12 @@ import sys
 # Add resources/lib to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'resources', 'lib'))
 
-from parser import decode_filename, Cartoon
+from parser import Cartoon
 
 
 class TestParser(unittest.TestCase):
-    
-    @given(st.text(alphabet=st.characters(min_codepoint=0x0400, max_codepoint=0x04FF), min_size=1))
-    def test_decode_filename_round_trip(self, original_text):
-        """
-        Property 2: URL Decoding Round-Trip
-        Validates: Requirements 3.2
-        
-        For any valid Cyrillic string, encoding then decoding should preserve the content.
-        """
-        # Add a file extension to test removal
-        filename_with_ext = original_text + ".avi"
-        
-        # Encode the filename
-        encoded = urllib.parse.quote(filename_with_ext, encoding='utf-8')
-        
-        # Decode using our function
-        decoded = decode_filename(encoded)
-        
-        # Should get back the original text without extension
-        self.assertEqual(decoded, original_text)
-    
-    def test_decode_filename_basic_examples(self):
-        """Test decode_filename with known examples."""
-        # Test basic Cyrillic decoding
-        encoded = "%D0%9C%D0%B0%D1%88%D0%B0.avi"  # "Маша.avi"
-        expected = "Маша"
-        result = decode_filename(encoded)
-        self.assertEqual(result, expected)
-        
-        # Test with different extension
-        encoded = "%D0%9D%D1%83%2C%20%D0%BF%D0%BE%D0%B3%D0%BE%D0%B4%D0%B8.mp4"  # "Ну, погоди.mp4"
-        expected = "Ну, погоди"
-        result = decode_filename(encoded)
-        self.assertEqual(result, expected)
 
-
-if __name__ == '__main__':
-    unittest.main()
-
-from parser import parse_catalog
+from parser import Cartoon, parse_catalog
 from cache import save_cache, load_cache, clear_cache
 
 class TestParseCatalog(unittest.TestCase):
@@ -64,71 +26,78 @@ class TestParseCatalog(unittest.TestCase):
         max_size=10
     ))
     def test_parse_catalog_video_link_extraction(self, video_files):
-        """
-        Property 1: Video Link Extraction
-        Validates: Requirements 3.1
-        
-        For any valid HTML page containing anchor tags with href attributes 
-        pointing to video files, the parser SHALL extract all such links without missing any.
-        """
         base_url = "https://example.com/multiki/"
         
-        # Создать HTML с видео ссылками
-        html_parts = ['<html><body>']
+        html_parts = ['<table>']
         expected_count = 0
         
-        for filename_base, extension in video_files:
-            # URL-encode filename для реалистичности
-            encoded_filename = urllib.parse.quote(filename_base + extension, encoding='utf-8')
-            html_parts.append(f'<a href="{encoded_filename}">Link</a>')
+        for i, (filename_base, extension) in enumerate(video_files):
+            encoded_filename = urllib.parse.quote(filename_base, encoding='utf-8')
+            row_class = "o" if i % 2 == 0 else "e"
+            
+            html_parts.append(f'''
+            <tr class="{row_class}">
+                <td class="a">{i+1}</td>
+                <td class="l"><a href="http://example.com/info/{encoded_filename}{extension}.html">{filename_base}</a></td>
+                <td class="r">100000000</td>
+                <td>640x480</td>
+                <td>00:10:00</td>
+                <td><a href="http://example.com/multiki/{encoded_filename}{extension}">http</a></td>
+            </tr>
+            ''')
             expected_count += 1
         
-        html_parts.append('</body></html>')
+        html_parts.append('</table>')
         html = '\n'.join(html_parts)
         
-        # Парсить каталог
         result = parse_catalog(html, base_url)
         
-        # Проверить, что извлечены все видео ссылки
         self.assertEqual(len(result), expected_count)
         
-        # Проверить, что все результаты - это видео файлы
         for cartoon in result:
             self.assertIn(cartoon.extension.lower(), {'.avi', '.mp4', '.mkv', '.flv'})
-            self.assertTrue(cartoon.url.startswith(base_url))
+            self.assertTrue(cartoon.url.startswith("http://example.com/multiki/"))
     
     def test_parse_catalog_basic_examples(self):
         """Test parse_catalog with known HTML examples."""
         base_url = "https://multiki.arjlover.net/multiki/"
         
         html = '''
-        <html>
-        <body>
-        <a href="%D0%9C%D0%B0%D1%88%D0%B0.avi">Маша</a>
-        <a href="%D0%9C%D0%B0%D1%88%D0%B0.jpg">Маша thumbnail</a>
-        <a href="%D0%9D%D1%83%2C%20%D0%BF%D0%BE%D0%B3%D0%BE%D0%B4%D0%B8.mp4">Ну, погоди</a>
-        <a href="some_text_file.txt">Not a video</a>
-        </body>
-        </html>
+        <table>
+        <tr class="o">
+            <td class="a">1</td>
+            <td class="l"><a href="http://multiki.arjlover.net/info/13.reis.avi.html">13 рейс</a></td>
+            <td class="r">106639360</td>
+            <td>640x480</td>
+            <td>00:09:44</td>
+            <td><a href="http://multiki.arjlover.net/multiki/13.reis.avi">http</a></td>
+        </tr>
+        <tr class="e">
+            <td class="a">2</td>
+            <td class="l"><a href="http://multiki.arjlover.net/info/masha.avi.html">Маша и медведь</a></td>
+            <td class="r">200000000</td>
+            <td>720x576</td>
+            <td>00:15:30</td>
+            <td><a href="http://multiki.arjlover.net/multiki/masha.avi">http</a></td>
+        </tr>
+        </table>
         '''
         
         result = parse_catalog(html, base_url)
         
-        # Должно быть 2 видео файла
         self.assertEqual(len(result), 2)
         
         # Проверить первый мультфильм
-        masha = next((c for c in result if c.title == "Маша"), None)
-        self.assertIsNotNone(masha)
-        self.assertEqual(masha.extension, ".avi")
-        self.assertEqual(masha.url, base_url + "%D0%9C%D0%B0%D1%88%D0%B0.avi")
-        self.assertEqual(masha.thumbnail, base_url + "%D0%9C%D0%B0%D1%88%D0%B0.jpg")
+        reis = next((c for c in result if c.title == "13 рейс"), None)
+        self.assertIsNotNone(reis)
+        self.assertEqual(reis.extension, ".avi")
+        self.assertEqual(reis.url, "http://multiki.arjlover.net/multiki/13.reis.avi")
         
         # Проверить второй мультфильм
-        nu_pogodi = next((c for c in result if c.title == "Ну, погоди"), None)
-        self.assertIsNotNone(nu_pogodi)
-        self.assertEqual(nu_pogodi.extension, ".mp4")
-        self.assertEqual(nu_pogodi.thumbnail, "")  # Нет соответствующего изображения
+        masha = next((c for c in result if c.title == "Маша и медведь"), None)
+        self.assertIsNotNone(masha)
+        self.assertEqual(masha.extension, ".avi")
+        self.assertEqual(masha.url, "http://multiki.arjlover.net/multiki/masha.avi")
 
 
 class TestCache(unittest.TestCase):
