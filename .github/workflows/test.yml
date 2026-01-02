@@ -1,0 +1,64 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest hypothesis
+    
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -v --tb=short
+    
+    - name: Test plugin structure
+      run: |
+        # Check required files exist
+        test -f addon.xml
+        test -f main.py
+        test -d resources/lib
+        test -f resources/lib/__init__.py
+        test -f resources/lib/parser.py
+        test -f resources/lib/cache.py
+    
+    - name: Validate addon.xml
+      run: |
+        python -c "
+        import xml.etree.ElementTree as ET
+        tree = ET.parse('addon.xml')
+        root = tree.getroot()
+        assert root.get('id') == 'plugin.video.arjlover'
+        assert root.get('version') is not None
+        print(f'Plugin ID: {root.get(\"id\")}')
+        print(f'Version: {root.get(\"version\")}')
+        "
+    
+    - name: Test imports
+      run: |
+        cd resources/lib
+        python -c "
+        import sys
+        sys.path.insert(0, '.')
+        import parser
+        import cache
+        print('All modules imported successfully')
+        "
