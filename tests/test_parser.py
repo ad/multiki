@@ -32,10 +32,10 @@ class TestParseCatalog(unittest.TestCase):
             row_class = "o" if i % 2 == 0 else "e"
             
             html_parts.append(f'''
-            <tr class="{row_class}">
-                <td class="a">{i+1}</td>
-                <td class="l"><a href="http://example.com/info/{encoded_filename}{extension}.html">{filename_base}</a></td>
-                <td class="r">100000000</td>
+            <tr class={row_class}>
+                <td class=a>{i+1}</td>
+                <td class=l><a href="http://example.com/info/{encoded_filename}{extension}.html">{filename_base}</a></td>
+                <td class=r>100000000</td>
                 <td>640x480</td>
                 <td>00:10:00</td>
                 <td><a href="http://example.com/multiki/{encoded_filename}{extension}">http</a></td>
@@ -55,23 +55,22 @@ class TestParseCatalog(unittest.TestCase):
             self.assertTrue(cartoon.url.startswith("http://example.com/multiki/"))
     
     def test_parse_catalog_basic_examples(self):
-        """Test parse_catalog with known HTML examples."""
         base_url = "https://multiki.arjlover.net/multiki/"
         
         html = '''
         <table>
-        <tr class="o">
-            <td class="a">1</td>
-            <td class="l"><a href="http://multiki.arjlover.net/info/13.reis.avi.html">13 рейс</a></td>
-            <td class="r">106639360</td>
+        <tr class=o>
+            <td class=a>1</td>
+            <td class=l><a href="http://multiki.arjlover.net/info/13.reis.avi.html">13 рейс</a></td>
+            <td class=r>106639360</td>
             <td>640x480</td>
             <td>00:09:44</td>
             <td><a href="http://multiki.arjlover.net/multiki/13.reis.avi">http</a></td>
         </tr>
-        <tr class="e">
-            <td class="a">2</td>
-            <td class="l"><a href="http://multiki.arjlover.net/info/masha.avi.html">Маша и медведь</a></td>
-            <td class="r">200000000</td>
+        <tr class=e>
+            <td class=a>2</td>
+            <td class=l><a href="http://multiki.arjlover.net/info/masha.avi.html">Маша и медведь</a></td>
+            <td class=r>200000000</td>
             <td>720x576</td>
             <td>00:15:30</td>
             <td><a href="http://multiki.arjlover.net/multiki/masha.avi">http</a></td>
@@ -83,13 +82,12 @@ class TestParseCatalog(unittest.TestCase):
         
         self.assertEqual(len(result), 2)
         
-        # Проверить первый мультфильм
         reis = next((c for c in result if c.title == "13 рейс"), None)
         self.assertIsNotNone(reis)
         self.assertEqual(reis.extension, ".avi")
         self.assertEqual(reis.url, "http://multiki.arjlover.net/multiki/13.reis.avi")
+        self.assertEqual(reis.duration, "00:09:44")
         
-        # Проверить второй мультфильм
         masha = next((c for c in result if c.title == "Маша и медведь"), None)
         self.assertIsNotNone(masha)
         self.assertEqual(masha.extension, ".avi")
@@ -99,11 +97,9 @@ class TestParseCatalog(unittest.TestCase):
 class TestCache(unittest.TestCase):
     
     def setUp(self):
-        """Очистить кэш перед каждым тестом."""
         clear_cache()
     
     def tearDown(self):
-        """Очистить кэш после каждого теста."""
         clear_cache()
     
     @given(st.lists(
@@ -112,30 +108,21 @@ class TestCache(unittest.TestCase):
             title=st.text(alphabet=st.characters(min_codepoint=0x0400, max_codepoint=0x04FF), min_size=1),
             url=st.text(min_size=10).map(lambda x: f"https://example.com/{x}"),
             extension=st.sampled_from(['.avi', '.mp4', '.mkv', '.flv']),
-            thumbnail=st.text(min_size=0).map(lambda x: f"https://example.com/{x}.jpg" if x else "")
+            thumbnail=st.text(min_size=0).map(lambda x: f"https://example.com/{x}.jpg" if x else ""),
+            info_url=st.just(""),
+            duration=st.just(""),
+            plot=st.just("")
         ),
         min_size=0,
         max_size=10
     ))
     def test_cache_round_trip(self, cartoons):
-        """
-        Property 4: Cache Round-Trip
-        Validates: Requirements 4.1, 4.2
-        
-        For any list of Cartoon objects, saving to cache and then loading from cache 
-        SHALL return an equivalent list of Cartoon objects.
-        """
-        # Сохранить в кэш
         save_cache(cartoons)
-        
-        # Загрузить из кэша
         loaded_cartoons = load_cache()
         
-        # Проверить, что загруженные данные эквивалентны исходным
         self.assertIsNotNone(loaded_cartoons)
         self.assertEqual(len(loaded_cartoons), len(cartoons))
         
-        # Проверить каждый мультфильм
         for original, loaded in zip(cartoons, loaded_cartoons):
             self.assertEqual(original.title, loaded.title)
             self.assertEqual(original.url, loaded.url)

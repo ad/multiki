@@ -37,15 +37,9 @@ def get_cache_path() -> str:
 
 
 def save_cache(cartoons: List[Cartoon]) -> None:
-    """
-    Сохранить список мультфильмов в кэш.
-    
-    Args:
-        cartoons: список мультфильмов для сохранения
-    """
+    """Сохранить список мультфильмов в кэш."""
     cache_path = get_cache_path()
     
-    # Подготовить данные для сохранения
     cache_data = {
         'timestamp': datetime.now().isoformat(),
         'cartoons': [
@@ -53,34 +47,28 @@ def save_cache(cartoons: List[Cartoon]) -> None:
                 'title': cartoon.title,
                 'url': cartoon.url,
                 'extension': cartoon.extension,
-                'thumbnail': cartoon.thumbnail
+                'thumbnail': cartoon.thumbnail,
+                'info_url': cartoon.info_url,
+                'duration': cartoon.duration,
+                'plot': cartoon.plot
             }
             for cartoon in cartoons
         ]
     }
     
     try:
-        # Сохранить в JSON файл
         with open(cache_path, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f, ensure_ascii=False, indent=2)
-    
     except (OSError, IOError) as e:
-        # Логировать предупреждение, но не прерывать выполнение
         try:
             import xbmc
             xbmc.log(f"ArjLover: Не удалось сохранить кэш: {e}", xbmc.LOGWARNING)
         except ImportError:
-            # Fallback для тестирования
             print(f"Warning: Не удалось сохранить кэш: {e}")
 
 
 def load_cache() -> Optional[List[Cartoon]]:
-    """
-    Загрузить список мультфильмов из кэша.
-    
-    Returns:
-        Список мультфильмов или None если кэш невалиден/отсутствует
-    """
+    """Загрузить список мультфильмов из кэша."""
     if not is_cache_valid():
         return None
     
@@ -90,28 +78,27 @@ def load_cache() -> Optional[List[Cartoon]]:
         with open(cache_path, 'r', encoding='utf-8') as f:
             cache_data = json.load(f)
         
-        # Восстановить объекты Cartoon из JSON
         cartoons = []
-        for cartoon_data in cache_data.get('cartoons', []):
+        for c in cache_data.get('cartoons', []):
             cartoon = Cartoon(
-                title=cartoon_data['title'],
-                url=cartoon_data['url'],
-                extension=cartoon_data['extension'],
-                thumbnail=cartoon_data['thumbnail']
+                title=c['title'],
+                url=c['url'],
+                extension=c['extension'],
+                thumbnail=c['thumbnail'],
+                info_url=c.get('info_url', ''),
+                duration=c.get('duration', ''),
+                plot=c.get('plot', '')
             )
             cartoons.append(cartoon)
         
         return cartoons
     
     except (OSError, IOError, json.JSONDecodeError, KeyError) as e:
-        # Кэш поврежден или недоступен
         try:
             import xbmc
             xbmc.log(f"ArjLover: Ошибка чтения кэша: {e}", xbmc.LOGWARNING)
         except ImportError:
-            # Fallback для тестирования
             print(f"Warning: Ошибка чтения кэша: {e}")
-        
         return None
 
 
