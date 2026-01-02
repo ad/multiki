@@ -49,7 +49,7 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'workflow_dispatch'
     
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -98,6 +98,9 @@ jobs:
         current="${{ steps.current_version.outputs.current }}"
         bump_type="${{ steps.version_bump.outputs.type }}"
         
+        echo "Current version: $current"
+        echo "Bump type: $bump_type"
+        
         # Simple version bumping without semver library
         IFS='.' read -r major minor patch <<< "$current"
         
@@ -117,6 +120,7 @@ jobs:
         esac
         
         new_version="$major.$minor.$patch"
+        echo "New version: $new_version"
         echo "version=$new_version" >> $GITHUB_OUTPUT
     
     - name: Update addon.xml version
@@ -173,8 +177,19 @@ jobs:
         # Move to root
         mv build/plugin.video.arjlover-${{ steps.version.outputs.version }}.zip .
     
+    - name: Check if release exists
+      id: check_release
+      run: |
+        if gh release view v${{ steps.version.outputs.version }} >/dev/null 2>&1; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
     - name: Create Release
-      if: steps.version.outputs.version != steps.current_version.outputs.current
+      if: steps.version.outputs.version != steps.current_version.outputs.current && steps.check_release.outputs.exists == 'false'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
